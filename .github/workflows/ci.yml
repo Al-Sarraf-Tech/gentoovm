@@ -7,10 +7,19 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   static-validation:
     name: Static Validation
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -51,6 +60,8 @@ jobs:
   config-validation:
     name: Installer Config Validation
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -103,6 +114,8 @@ jobs:
   postinstall-validation:
     name: Post-Install Script Validation
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -131,6 +144,8 @@ jobs:
   readme-validation:
     name: README Quality
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -160,6 +175,8 @@ jobs:
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -186,6 +203,8 @@ jobs:
   sbom:
     name: SBOM Generation
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -234,6 +253,8 @@ jobs:
   checksum-verification:
     name: Checksum Verification
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -246,6 +267,8 @@ jobs:
   regression:
     name: Regression Suite
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     needs: [static-validation, config-validation, postinstall-validation]
     steps:
       - uses: actions/checkout@v4
