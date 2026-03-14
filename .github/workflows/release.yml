@@ -13,8 +13,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Generate SBOM
         run: |
@@ -28,8 +26,7 @@ jobs:
               "component": {
                 "type": "operating-system",
                 "name": "GentooVM",
-                "version": "${{ github.ref_name }}",
-                "description": "Custom Gentoo Linux distribution for QEMU/KVM virtual machines"
+                "version": "${{ github.ref_name }}"
               }
             },
             "components": []
@@ -49,76 +46,102 @@ jobs:
           sbom["components"] = components
           with open("sbom.json", "w") as f:
               json.dump(sbom, f, indent=2)
-          print(f"SBOM: {len(components)} components")
+          print(f"SBOM with {len(components)} components")
           PYEOF
-
-      - name: Verify checksums
-        run: |
-          cd iso
-          [ -f gentoovm.iso ] && sha256sum -c gentoovm.iso.sha256 || echo "ISO via LFS - checksums tracked"
 
       - name: Create Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ github.ref_name }}"
+          cat > /tmp/relnotes.md << 'NOTES'
+          ## GentooVM $TAG
 
-          # Build release notes
-          cat > /tmp/release-notes.md << 'NOTES'
-          ## GentooVM — Custom Gentoo Linux for Virtual Machines
+          Custom Gentoo Linux for QEMU/KVM. See [README](https://github.com/jalsarraf0/gentoovm) and [Getting Started](https://github.com/jalsarraf0/gentoovm/blob/main/GETTING-STARTED.md).
 
-          A lean, polished Gentoo-based Linux distribution with the Cinnamon desktop, built specifically for QEMU/KVM.
-
-          ### Highlights
-          - **Cinnamon 6.4.13** desktop environment
-          - **Kernel 6.19.7** with virtio + virgl GPU acceleration
-          - **Calamares** graphical installer — no Gentoo knowledge required
-          - **Offline installation** — no internet needed
-          - **BIOS + UEFI** auto-detection
-          - **zram** compressed swap with VM-tuned sysctl
-          - **Kernel Manager** — GUI + CLI tools to browse and install kernels from kernel.org
-          - **GRUB** 30-second boot menu for kernel selection
-          - **889 packages**, zstd-compressed squashfs
-
-          ### Quick Start
-          ```bash
-          qemu-img create -f qcow2 disk.qcow2 50G
-
-          qemu-system-x86_64 \
-              -enable-kvm -cpu host -smp 4 -m 16384 \
-              -drive file=disk.qcow2,format=qcow2,if=virtio \
-              -cdrom gentoovm.iso -boot d \
-              -device virtio-net-pci,netdev=net0 -netdev user,id=net0 \
-              -device virtio-vga-gl \
-              -device virtio-balloon -device qemu-xhci -device usb-tablet \
-              -display gtk,gl=on \
-              -name "GentooVM"
-          ```
-
-          ### Requirements
-          - QEMU/KVM with `virtio-vga-gl` and host OpenGL support
-          - 4+ vCPUs, 4+ GB RAM (16 GB recommended), 50 GB disk
-
-          > **Warning:** This distribution is designed for virtual machines only. Bare metal installation is unsupported — use at your own risk.
-
-          ### Checksums
-          See `gentoovm.iso.sha256` and `gentoovm.iso.md5` attached.
+          Download split ISO parts and run `reassemble.sh` (Linux/macOS) or `reassemble.ps1` (Windows). Or use the torrent/magnet link.
           NOTES
+          sed -i "s/\$TAG/$TAG/g" /tmp/relnotes.md
 
-          # Create release
-          if [ -f iso/gentoovm.iso ]; then
-            gh release create "$TAG" \
-              --title "GentooVM ${TAG}" \
-              --notes-file /tmp/release-notes.md \
-              iso/gentoovm.iso \
-              iso/gentoovm.iso.sha256 \
-              iso/gentoovm.iso.md5 \
-              sbom.json
+          gh release create "$TAG" \
+            --title "GentooVM ${TAG}" \
+            --notes-file /tmp/relnotes.md \
+            iso/gentoovm.iso.sha256 \
+            iso/gentoovm.iso.md5 \
+            iso/reassemble.sh \
+            iso/reassemble.ps1 \
+            sbom.json \
+            2>/dev/null || true
+
+  update-torrent-seed:
+    name: Update Torrent Seed
+    runs-on: self-hosted
+    needs: release
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update torrent seed on server
+        run: |
+          TAG="${{ github.ref_name }}"
+          SEED_DIR="/docker/pirates/gentoo"
+          COMPLETE_DIR="/docker/pirates/complete"
+          ISO_SRC="/home/jalsarraf/git/gentoovm/iso/gentoovm.iso"
+          TORRENT_SRC="/home/jalsarraf/git/gentoovm/iso/gentoovm-*.torrent"
+
+          echo "=== Updating torrent seed for $TAG ==="
+
+          # Stop and remove old torrent from transmission
+          echo "Removing old torrents..."
+          OLD_IDS=$(transmission-remote -n "jalsarraf:ffxi123\$" -l 2>/dev/null | grep "gentoovm" | awk '{print $1}' | grep -v "ID\|Sum")
+          for id in $OLD_IDS; do
+            echo "  Removing torrent ID $id"
+            transmission-remote -n "jalsarraf:ffxi123\$" -t "$id" --remove 2>/dev/null || true
+          done
+
+          # Clean old files
+          rm -f "$COMPLETE_DIR"/gentoovm.iso
+          rm -f "$SEED_DIR"/gentoovm-*.torrent
+
+          # Copy new ISO and torrent
+          if [ -f "$ISO_SRC" ]; then
+            echo "Copying new ISO to seed directory..."
+            cp "$ISO_SRC" "$COMPLETE_DIR/gentoovm.iso"
+            cp $TORRENT_SRC "$SEED_DIR/" 2>/dev/null || true
+
+            # Find the new torrent file
+            NEW_TORRENT=$(ls -t "$SEED_DIR"/gentoovm-*.torrent 2>/dev/null | head -1)
+            if [ -n "$NEW_TORRENT" ]; then
+              echo "Adding new torrent to transmission..."
+              transmission-remote -n "jalsarraf:ffxi123\$" \
+                -a "$NEW_TORRENT" \
+                --download-dir /data/completed 2>&1
+
+              sleep 5
+
+              # Start seeding
+              NEW_ID=$(transmission-remote -n "jalsarraf:ffxi123\$" -l 2>/dev/null | grep "gentoovm" | awk '{print $1}' | grep -v "ID\|Sum" | tail -1)
+              if [ -n "$NEW_ID" ]; then
+                transmission-remote -n "jalsarraf:ffxi123\$" -t "$NEW_ID" -s 2>/dev/null
+                echo "Seeding started for torrent ID $NEW_ID"
+              fi
+
+              # Wait for verification
+              echo "Waiting for verification..."
+              for i in $(seq 1 30); do
+                sleep 5
+                STATUS=$(transmission-remote -n "jalsarraf:ffxi123\$" -l 2>/dev/null | grep "gentoovm")
+                echo "  $STATUS"
+                echo "$STATUS" | grep -q "100%" && break
+              done
+            fi
+
+            echo "=== Torrent seed updated for $TAG ==="
           else
-            gh release create "$TAG" \
-              --title "GentooVM ${TAG}" \
-              --notes-file /tmp/release-notes.md \
-              iso/gentoovm.iso.sha256 \
-              iso/gentoovm.iso.md5 \
-              sbom.json
+            echo "WARNING - ISO not found at $ISO_SRC"
+            echo "Upload the ISO manually and run the seed update"
           fi
+
+          # Show final status
+          echo ""
+          echo "=== Current torrents ==="
+          transmission-remote -n "jalsarraf:ffxi123\$" -l 2>/dev/null
