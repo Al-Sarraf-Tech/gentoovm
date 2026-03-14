@@ -4,13 +4,106 @@ on:
   push:
     tags: ['v*']
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
 jobs:
+  ci-check:
+    name: CI Gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: YAML syntax validation
+        run: |
+          pip install pyyaml
+          for f in calamares/settings.conf calamares/modules/*.conf; do
+            python3 -c "import yaml; yaml.safe_load(open('$f'))" && echo "  PASS $f" || { echo "  FAIL $f"; exit 1; }
+          done
+          python3 -c "import yaml; yaml.safe_load(open('calamares/branding/gentoovm/branding.desc'))" && echo "  PASS branding.desc"
+
+      - name: Shell script syntax
+        run: |
+          find . -name "*.sh" -type f | while read f; do
+            bash -n "$f" && echo "  PASS $f" || { echo "  FAIL $f"; exit 1; }
+          done
+
+      - name: Python syntax
+        run: python3 -m py_compile config/gentoovm-kernel-manager-gui && echo "PASS kernel-manager-gui"
+
+      - name: Executable permissions
+        run: |
+          for f in scripts/*.sh qemu/*.sh run-*.sh; do
+            [ -x "$f" ] && echo "  PASS $f" || { echo "  FAIL not executable $f"; exit 1; }
+          done
+
+      - name: No hardcoded secrets
+        run: |
+          FOUND=0
+          grep -rn "BEGIN.*PRIVATE KEY" . --include="*.sh" --include="*.conf" --include="*.py" --include="*.md" && FOUND=1 || true
+          grep -rn "api[_-]key\|api[_-]token\|secret[_-]key" . --include="*.sh" --include="*.conf" --include="*.py" -i | grep -v README | grep -v ".md" && FOUND=1 || true
+          [ "$FOUND" -eq 0 ] && echo "PASS no secrets found"
+
+      - name: Calamares sequence integrity
+        run: |
+          python3 << 'PYEOF'
+          import yaml
+          with open("calamares/settings.conf") as f:
+              cfg = yaml.safe_load(f)
+          seq = cfg.get("sequence", [])
+          show_modules = []
+          exec_modules = []
+          for phase in seq:
+              if "show" in phase:
+                  show_modules.extend(phase["show"])
+              if "exec" in phase:
+                  exec_modules.extend(phase["exec"])
+          for m in ["welcome", "locale", "keyboard", "partition", "users", "summary", "finished"]:
+              assert m in show_modules, f"Missing show module {m}"
+          for m in ["partition", "mount", "unpackfs", "users", "shellprocess", "umount"]:
+              assert m in exec_modules, f"Missing exec module {m}"
+          print("Calamares sequence OK")
+          PYEOF
+
+      - name: Security scan
+        run: |
+          FOUND=0
+          grep -rn "BEGIN.*PRIVATE KEY" . --include="*.sh" --include="*.conf" --include="*.py" && FOUND=1 || true
+          grep -rn "password\s*=\s*['\"]" . --include="*.sh" --include="*.py" | grep -v "README\|example\|template" && FOUND=1 || true
+          [ "$FOUND" -eq 0 ] && echo "PASS no credentials found"
+
+      - name: Checksum files exist
+        run: |
+          [ -f iso/gentoovm.iso.sha256 ] && echo "PASS sha256 file"
+          [ -f iso/gentoovm.iso.md5 ] && echo "PASS md5 file"
+
+      - name: Repo completeness
+        run: |
+          MISSING=0
+          for f in README.md GETTING-STARTED.md LICENSE calamares/settings.conf \
+                   config/gentoovm-postinstall.sh config/gentoovm-kernel-manager \
+                   config/gentoovm-kernel-manager-gui config/README-desktop.md \
+                   config/make.conf config/grub-defaults scripts/build-iso.sh \
+                   qemu/launch-live.sh qemu/launch-installed.sh \
+                   manifests/installed-packages.txt docs/README.md \
+                   iso/gentoovm.iso.sha256 iso/reassemble.sh iso/reassemble.ps1 \
+                   .gitignore; do
+            [ -e "$f" ] && echo "  PASS $f" || { echo "  FAIL $f"; MISSING=$((MISSING+1)); }
+          done
+          [ "$MISSING" -eq 0 ] || { echo "FAIL $MISSING files missing"; exit 1; }
+
   release:
     name: Create Release
     runs-on: ubuntu-latest
+    needs: ci-check
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -77,6 +170,8 @@ jobs:
     name: Update Torrent Seed
     runs-on: self-hosted
     needs: release
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -92,10 +187,10 @@ jobs:
 
           # Stop and remove old torrent from transmission
           echo "Removing old torrents..."
-          OLD_IDS=$(transmission-remote -n "jalsarraf:ffxi123\$" -l 2>/dev/null | grep "gentoovm" | awk '{print $1}' | grep -v "ID\|Sum")
+          OLD_IDS=$(transmission-remote -n "${{ secrets.TRANSMISSION_CREDS }}" -l 2>/dev/null | grep "gentoovm" | awk '{print $1}' | grep -v "ID\|Sum")
           for id in $OLD_IDS; do
             echo "  Removing torrent ID $id"
-            transmission-remote -n "jalsarraf:ffxi123\$" -t "$id" --remove 2>/dev/null || true
+            transmission-remote -n "${{ secrets.TRANSMISSION_CREDS }}" -t "$id" --remove 2>/dev/null || true
           done
 
           # Clean old files
@@ -112,16 +207,16 @@ jobs:
             NEW_TORRENT=$(ls -t "$SEED_DIR"/gentoovm-*.torrent 2>/dev/null | head -1)
             if [ -n "$NEW_TORRENT" ]; then
               echo "Adding new torrent to transmission..."
-              transmission-remote -n "jalsarraf:ffxi123\$" \
+              transmission-remote -n "${{ secrets.TRANSMISSION_CREDS }}" \
                 -a "$NEW_TORRENT" \
                 --download-dir /data/completed 2>&1
 
               sleep 5
 
               # Start seeding
-              NEW_ID=$(transmission-remote -n "jalsarraf:ffxi123\$" -l 2>/dev/null | grep "gentoovm" | awk '{print $1}' | grep -v "ID\|Sum" | tail -1)
+              NEW_ID=$(transmission-remote -n "${{ secrets.TRANSMISSION_CREDS }}" -l 2>/dev/null | grep "gentoovm" | awk '{print $1}' | grep -v "ID\|Sum" | tail -1)
               if [ -n "$NEW_ID" ]; then
-                transmission-remote -n "jalsarraf:ffxi123\$" -t "$NEW_ID" -s 2>/dev/null
+                transmission-remote -n "${{ secrets.TRANSMISSION_CREDS }}" -t "$NEW_ID" -s 2>/dev/null
                 echo "Seeding started for torrent ID $NEW_ID"
               fi
 
@@ -129,7 +224,7 @@ jobs:
               echo "Waiting for verification..."
               for i in $(seq 1 30); do
                 sleep 5
-                STATUS=$(transmission-remote -n "jalsarraf:ffxi123\$" -l 2>/dev/null | grep "gentoovm")
+                STATUS=$(transmission-remote -n "${{ secrets.TRANSMISSION_CREDS }}" -l 2>/dev/null | grep "gentoovm")
                 echo "  $STATUS"
                 echo "$STATUS" | grep -q "100%" && break
               done
@@ -144,4 +239,4 @@ jobs:
           # Show final status
           echo ""
           echo "=== Current torrents ==="
-          transmission-remote -n "jalsarraf:ffxi123\$" -l 2>/dev/null
+          transmission-remote -n "${{ secrets.TRANSMISSION_CREDS }}" -l 2>/dev/null
