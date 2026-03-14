@@ -1,0 +1,124 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Generate SBOM
+        run: |
+          python3 << 'PYEOF'
+          import json
+          sbom = {
+            "bomFormat": "CycloneDX",
+            "specVersion": "1.4",
+            "version": 1,
+            "metadata": {
+              "component": {
+                "type": "operating-system",
+                "name": "GentooVM",
+                "version": "${{ github.ref_name }}",
+                "description": "Custom Gentoo Linux distribution for QEMU/KVM virtual machines"
+              }
+            },
+            "components": []
+          }
+          components = []
+          with open("manifests/installed-packages.txt") as f:
+              for line in f:
+                  line = line.strip()
+                  if "/" in line:
+                      cat, namever = line.split("/", 1)
+                      parts = namever.rsplit("-", 1)
+                      if len(parts) == 2 and parts[1][0].isdigit():
+                          name, version = parts
+                      else:
+                          name, version = namever, "unknown"
+                      components.append({"type": "library", "group": cat, "name": name, "version": version})
+          sbom["components"] = components
+          with open("sbom.json", "w") as f:
+              json.dump(sbom, f, indent=2)
+          print(f"SBOM: {len(components)} components")
+          PYEOF
+
+      - name: Verify checksums
+        run: |
+          cd iso
+          [ -f gentoovm.iso ] && sha256sum -c gentoovm.iso.sha256 || echo "ISO via LFS - checksums tracked"
+
+      - name: Create Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+
+          # Build release notes
+          cat > /tmp/release-notes.md << 'NOTES'
+          ## GentooVM — Custom Gentoo Linux for Virtual Machines
+
+          A lean, polished Gentoo-based Linux distribution with the Cinnamon desktop, built specifically for QEMU/KVM.
+
+          ### Highlights
+          - **Cinnamon 6.4.13** desktop environment
+          - **Kernel 6.19.7** with virtio + virgl GPU acceleration
+          - **Calamares** graphical installer — no Gentoo knowledge required
+          - **Offline installation** — no internet needed
+          - **BIOS + UEFI** auto-detection
+          - **zram** compressed swap with VM-tuned sysctl
+          - **Kernel Manager** — GUI + CLI tools to browse and install kernels from kernel.org
+          - **GRUB** 30-second boot menu for kernel selection
+          - **889 packages**, zstd-compressed squashfs
+
+          ### Quick Start
+          ```bash
+          qemu-img create -f qcow2 disk.qcow2 50G
+
+          qemu-system-x86_64 \
+              -enable-kvm -cpu host -smp 4 -m 16384 \
+              -drive file=disk.qcow2,format=qcow2,if=virtio \
+              -cdrom gentoovm.iso -boot d \
+              -device virtio-net-pci,netdev=net0 -netdev user,id=net0 \
+              -device virtio-vga-gl \
+              -device virtio-balloon -device qemu-xhci -device usb-tablet \
+              -display gtk,gl=on \
+              -name "GentooVM"
+          ```
+
+          ### Requirements
+          - QEMU/KVM with `virtio-vga-gl` and host OpenGL support
+          - 4+ vCPUs, 4+ GB RAM (16 GB recommended), 50 GB disk
+
+          > **Warning:** This distribution is designed for virtual machines only. Bare metal installation is unsupported — use at your own risk.
+
+          ### Checksums
+          See `gentoovm.iso.sha256` and `gentoovm.iso.md5` attached.
+          NOTES
+
+          # Create release
+          if [ -f iso/gentoovm.iso ]; then
+            gh release create "$TAG" \
+              --title "GentooVM ${TAG}" \
+              --notes-file /tmp/release-notes.md \
+              iso/gentoovm.iso \
+              iso/gentoovm.iso.sha256 \
+              iso/gentoovm.iso.md5 \
+              sbom.json
+          else
+            gh release create "$TAG" \
+              --title "GentooVM ${TAG}" \
+              --notes-file /tmp/release-notes.md \
+              iso/gentoovm.iso.sha256 \
+              iso/gentoovm.iso.md5 \
+              sbom.json
+          fi

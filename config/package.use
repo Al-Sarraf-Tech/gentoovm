@@ -1,0 +1,26 @@
+# Lean Cinnamon - avoid heavy deps
+x11-libs/gtk+ -cups
+dev-libs/glib -test
+media-libs/mesa -opencl
+net-misc/networkmanager -bluetooth -ppp
+sys-auth/polkit -kde
+app-crypt/gcr gtk
+sys-apps/systemd -gcrypt -importd -http
+# Grub needs both targets
+sys-boot/grub grub_platforms_efi-64 grub_platforms_pc
+# Firefox binary to avoid compilation
+www-client/firefox -system-av1 -system-harfbuzz -system-icu -system-jpeg -system-libevent -system-libvpx -system-png -system-webp
+media-libs/libwebp -tiff
+dev-python/pillow -truetype
+sys-kernel/installkernel dracut
+# Cinnamon deps
+dev-libs/gobject-introspection -test
+app-text/docbook-xml-dtd -test
+app-dicts/myspell-en l10n_en-US
+dev-libs/boost python
+dev-libs/libpwquality python
+app-admin/calamares -networkmanager
+sys-boot/grub mount
+media-libs/mesa virgl lavapipe
+media-libs/mesa VIDEO_CARDS: virgl
+media-libs/mesa video_cards_lavapipe
