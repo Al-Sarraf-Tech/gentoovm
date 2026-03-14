@@ -154,7 +154,7 @@ The reassembly scripts (`reassemble.sh`, `reassemble.ps1`) automatically verify 
 
 The security scan job runs on every CI invocation and checks for:
 
-1. **Private keys** -- `BEGIN.*PRIVATE KEY` patterns in scripts, configs, and Python files
+1. **Private keys** -- PEM-encoded key block patterns in scripts, configs, and Python files
 2. **Hardcoded passwords** -- `password\s*=\s*['"]` patterns (excluding documentation)
 3. **API keys/tokens** -- `api_key`, `api_token`, `secret_key` patterns
 4. **File permissions** -- World-writable files outside `.git/`
