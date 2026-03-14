@@ -10,7 +10,7 @@ REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 ISO_SRC="$REPO_DIR/iso/gentoovm.iso"
 SEED_DIR="/docker/pirates/gentoo"
 COMPLETE_DIR="/docker/pirates/complete"
-TRANS_AUTH="jalsarraf:ffxi123\$"
+TRANS_AUTH="${TRANSMISSION_CREDS:?Set TRANSMISSION_CREDS environment variable (user:pass)}"
 
 if [ ! -f "$ISO_SRC" ]; then
     echo "Error: ISO not found at $ISO_SRC"
