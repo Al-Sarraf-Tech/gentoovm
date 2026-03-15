@@ -168,7 +168,7 @@ jobs:
 
   update-torrent-seed:
     name: Update Torrent Seed
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     needs: release
     permissions:
       contents: read
