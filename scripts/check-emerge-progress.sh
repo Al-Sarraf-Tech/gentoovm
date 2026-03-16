@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034
 BUILD_ROOT=/home/jalsarraf/gentoo/build
 last=$(sudo tail -1 "$BUILD_ROOT/var/log/emerge.log" 2>/dev/null)
 completed=$(sudo grep -c "::: completed" "$BUILD_ROOT/var/log/emerge.log" 2>/dev/null)

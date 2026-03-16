@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034
 set -euo pipefail
 
 # Update the torrent seed with a new ISO release
