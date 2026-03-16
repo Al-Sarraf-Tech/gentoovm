@@ -1,7 +1,8 @@
 # GentooVM
 
 [![CI](https://github.com/jalsarraf0/gentoovm/actions/workflows/ci.yml/badge.svg)](https://github.com/jalsarraf0/gentoovm/actions/workflows/ci.yml)
-[![Release](https://github.com/jalsarraf0/gentoovm/actions/workflows/release.yml/badge.svg)](https://github.com/jalsarraf0/gentoovm/actions/workflows/release.yml)
+
+> CI runs on self-hosted runners managed by [haskell-ci-orchestrator](https://github.com/jalsarraf0/haskell-ci-orchestrator).
 
 A custom Gentoo Linux distribution built from scratch for QEMU/KVM virtual machines. Boots into a polished Cinnamon desktop with a one-click GUI installer.
 
