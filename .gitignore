@@ -1,0 +1,42 @@
+# ISO (distributed via GitHub Releases and torrent)
+iso/*.iso
+iso/*.iso.part.*
+iso/*.iso.gz
+iso/*.iso.zst
+
+# Build artifacts
+build/
+staging/
+cache/*.tar.*
+
+# QEMU disk images
+qemu/*.qcow2
+
+# Logs and test results
+logs/
+test-results/
+
+# Secrets and credentials
+.secrets
+*.key
+*.pem
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+id_ecdsa*
+*credentials*
+.env
+.env.*
+!.env.example
+.npmrc
+kubeconfig
+*.keystore
+token
+token.*
+*.token
+
+# Temporary
+*.tmp
+*.swp
+*~

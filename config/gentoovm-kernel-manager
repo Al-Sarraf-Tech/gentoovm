@@ -1,0 +1,300 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# GentooVM Kernel Manager
+# Browse, select, and install kernels from kernel.org and Gentoo portage
+
+BOLD='\033[1m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+header() {
+    echo ""
+    echo -e "${BOLD}╔══════════════════════════════════════════════╗${NC}"
+    echo -e "${BOLD}║       GentooVM Kernel Manager                ║${NC}"
+    echo -e "${BOLD}╚══════════════════════════════════════════════╝${NC}"
+    echo ""
+}
+
+check_root() {
+    if [ "$(id -u)" -ne 0 ]; then
+        echo -e "${RED}Error: Must run as root (sudo gentoovm-kernel-manager)${NC}"
+        exit 1
+    fi
+}
+
+show_current() {
+    echo -e "${CYAN}Current kernel:${NC} $(uname -r)"
+    echo -e "${CYAN}Architecture:${NC}  $(uname -m)"
+    echo ""
+}
+
+fetch_kernelorg() {
+    echo -e "${BOLD}Fetching latest versions from kernel.org...${NC}"
+    echo ""
+
+    if command -v curl &>/dev/null; then
+        FETCHER="curl -sL"
+    elif command -v wget &>/dev/null; then
+        FETCHER="wget -qO-"
+    else
+        echo -e "${RED}Neither curl nor wget available. Install one to check kernel.org.${NC}"
+        return 1
+    fi
+
+    local page
+    page=$($FETCHER "https://www.kernel.org/" 2>/dev/null) || {
+        echo -e "${RED}Could not reach kernel.org. Check network.${NC}"
+        return 1
+    }
+
+    # Extract release info from the page
+    local mainline stable longterm
+    mainline=$(echo "$page" | grep -oP 'mainline.*?<td><strong>[^<]+' | grep -oP '[0-9]+\.[0-9]+[^\s<]*' | head -1)
+    stable=$(echo "$page" | grep -oP 'stable.*?<td><strong>[^<]+' | grep -oP '[0-9]+\.[0-9]+[^\s<]*' | head -1)
+
+    echo -e "  ${BOLD}kernel.org releases:${NC}"
+    echo -e "  ─────────────────────────────────────────"
+
+    if [ -n "$mainline" ]; then
+        echo -e "  ${GREEN}★ Default (mainline):${NC}    $mainline"
+    else
+        echo -e "  ${GREEN}★ Default (mainline):${NC}    7.0-rc3"
+    fi
+
+    if [ -n "$stable" ]; then
+        echo -e "  ${GREEN}★ Latest stable:${NC}         $stable"
+    else
+        echo -e "  ${GREEN}★ Latest stable:${NC}         6.19.8"
+    fi
+
+    echo ""
+    echo -e "  ${BOLD}Longterm releases:${NC}"
+    echo "$page" | grep -oP 'longterm.*?<td><strong>[^<]+' | grep -oP '[0-9]+\.[0-9]+\.[0-9]+' | while read -r ver; do
+        echo -e "    $ver"
+    done 2>/dev/null
+
+    echo ""
+    echo -e "  ${CYAN}Browse all releases:${NC} https://www.kernel.org"
+    echo -e "  ${YELLOW}Note:${NC} Gentoo binary kernels may lag behind kernel.org by a few days."
+    echo -e "        Use option 2 to see what's available as prebuilt Gentoo packages."
+    echo ""
+}
+
+list_available() {
+    echo -e "${BOLD}Available Gentoo binary kernels:${NC}"
+    echo -e "  ─────────────────────────────────────────"
+
+    # Sync accept_keywords so we can see testing kernels
+    if [ ! -f /etc/portage/package.accept_keywords/kernel ]; then
+        mkdir -p /etc/portage/package.accept_keywords
+        echo 'sys-kernel/gentoo-kernel-bin ~amd64' > /etc/portage/package.accept_keywords/kernel
+        echo 'virtual/dist-kernel ~amd64' >> /etc/portage/package.accept_keywords/kernel
+    fi
+
+    local ebuilds
+    ebuilds=$(ls /var/db/repos/gentoo/sys-kernel/gentoo-kernel-bin/*.ebuild 2>/dev/null | \
+        sed 's|.*/gentoo-kernel-bin-||;s|\.ebuild||' | sort -V)
+
+    if [ -z "$ebuilds" ]; then
+        echo -e "  ${RED}No ebuilds found. Run 'emerge --sync' first.${NC}"
+        return 1
+    fi
+
+    local current
+    current=$(uname -r | sed 's/-gentoo-dist//')
+    local idx=1
+
+    while read -r ver; do
+        local marker=""
+        if [ "$ver" = "$current" ]; then
+            marker=" ${GREEN}← running${NC}"
+        elif [ -f "/boot/kernel-${ver}-gentoo-dist" ]; then
+            marker=" ${YELLOW}(installed)${NC}"
+        fi
+        printf "  ${CYAN}%2d${NC}) %-20s%b\n" "$idx" "$ver" "$marker"
+        idx=$((idx + 1))
+    done <<< "$ebuilds"
+
+    echo ""
+    echo -e "  ${YELLOW}Tip:${NC} Versions with ~ are testing/unstable. Stable versions are preferred"
+    echo -e "       for production. Use option 1 to check kernel.org for context."
+    echo ""
+}
+
+list_installed() {
+    echo -e "${BOLD}Installed kernels:${NC}"
+    echo -e "  ─────────────────────────────────────────"
+    local current
+    current=$(uname -r)
+    local found=false
+    for k in /boot/kernel-*; do
+        [ -f "$k" ] || continue
+        found=true
+        local kname
+        kname=$(basename "$k" | sed 's/kernel-//')
+        local marker=""
+        if [ "$kname" = "$current" ]; then
+            marker=" ${GREEN}← running${NC}"
+        fi
+        local size
+        size=$(du -h "$k" | cut -f1)
+        printf "  %-30s %6s%b\n" "$kname" "$size" "$marker"
+    done
+    if ! $found; then
+        echo -e "  ${RED}No kernels found in /boot${NC}"
+    fi
+    echo ""
+}
+
+install_kernel() {
+    local version="$1"
+
+    echo -e "${BOLD}Installing kernel ${version}...${NC}"
+    echo ""
+
+    # Accept testing keywords if needed
+    mkdir -p /etc/portage/package.accept_keywords
+    grep -q "sys-kernel/gentoo-kernel-bin" /etc/portage/package.accept_keywords/kernel 2>/dev/null || {
+        echo 'sys-kernel/gentoo-kernel-bin ~amd64' >> /etc/portage/package.accept_keywords/kernel
+        echo 'virtual/dist-kernel ~amd64' >> /etc/portage/package.accept_keywords/kernel
+    }
+
+    emerge --ask --getbinpkg "=sys-kernel/gentoo-kernel-bin-${version}"
+
+    if [ $? -eq 0 ]; then
+        echo ""
+        echo -e "${GREEN}Kernel ${version} installed successfully.${NC}"
+
+        # Create symlinks
+        local kfile="/boot/kernel-${version}-gentoo-dist"
+        local ifile="/boot/initramfs-${version}-gentoo-dist.img"
+        if [ -f "$kfile" ]; then
+            ln -sf "$(basename "$kfile")" /boot/vmlinuz
+            echo -e "  Symlinked vmlinuz -> $(basename "$kfile")"
+        fi
+        if [ -f "$ifile" ]; then
+            ln -sf "$(basename "$ifile")" /boot/initramfs.img
+            echo -e "  Symlinked initramfs.img -> $(basename "$ifile")"
+        fi
+
+        # Rebuild GRUB config
+        echo ""
+        echo -e "${BOLD}Updating GRUB...${NC}"
+        grub-mkconfig -o /boot/grub/grub.cfg 2>&1 | grep -E "Found|done"
+        echo ""
+        echo -e "${GREEN}Done. Reboot to use kernel ${version}.${NC}"
+    else
+        echo -e "${RED}Installation failed.${NC}"
+        return 1
+    fi
+}
+
+remove_kernel() {
+    local version="$1"
+    local current
+    current=$(uname -r | sed 's/-gentoo-dist//')
+
+    if [ "$version" = "$current" ]; then
+        echo -e "${RED}Cannot remove the currently running kernel ($current).${NC}"
+        return 1
+    fi
+
+    echo -e "${BOLD}Removing kernel ${version}...${NC}"
+    emerge --deselect "=sys-kernel/gentoo-kernel-bin-${version}" 2>/dev/null || true
+    emerge --depclean 2>/dev/null || true
+
+    # Clean boot files
+    rm -f "/boot/kernel-${version}-gentoo-dist"
+    rm -f "/boot/initramfs-${version}-gentoo-dist.img"
+    rm -f "/boot/vmlinuz-${version}-gentoo-dist"
+    rm -f "/boot/initrd.img-${version}-gentoo-dist"
+    rm -rf "/lib/modules/${version}-gentoo-dist"
+
+    grub-mkconfig -o /boot/grub/grub.cfg 2>&1 | grep -E "Found|done"
+    echo -e "${GREEN}Kernel ${version} removed.${NC}"
+}
+
+interactive_menu() {
+    while true; do
+        header
+        show_current
+        echo -e "  ${BOLD}1${NC}) Check kernel.org for latest releases"
+        echo -e "  ${BOLD}2${NC}) List available Gentoo binary kernels"
+        echo -e "  ${BOLD}3${NC}) List installed kernels"
+        echo -e "  ${BOLD}4${NC}) Install a kernel"
+        echo -e "  ${BOLD}5${NC}) Remove an old kernel"
+        echo -e "  ${BOLD}6${NC}) Sync portage tree (refresh available list)"
+        echo -e "  ${BOLD}q${NC}) Quit"
+        echo ""
+        read -rp "Choose [1-6/q]: " choice
+
+        case "$choice" in
+            1) fetch_kernelorg ;;
+            2) list_available ;;
+            3) list_installed ;;
+            4)
+                list_available
+                echo -e "  ${GREEN}Default: 7.0 (when available) | Recommended: latest 6.19.x stable${NC}"
+                echo ""
+                read -rp "Enter kernel version to install (e.g. 6.19.8): " kver
+                if [ -n "$kver" ]; then
+                    install_kernel "$kver"
+                fi
+                ;;
+            5)
+                list_installed
+                read -rp "Enter kernel version to remove (e.g. 6.18.12): " kver
+                if [ -n "$kver" ]; then
+                    remove_kernel "$kver"
+                fi
+                ;;
+            6)
+                echo -e "${BOLD}Syncing portage...${NC}"
+                emerge --sync 2>&1 | tail -5
+                ;;
+            q|Q) echo "Bye."; exit 0 ;;
+            *) echo -e "${RED}Invalid choice.${NC}" ;;
+        esac
+
+        echo ""
+        read -rp "Press Enter to continue..." _
+    done
+}
+
+# --- Main ---
+check_root
+
+if [ $# -eq 0 ]; then
+    interactive_menu
+else
+    case "$1" in
+        --list)       list_available ;;
+        --installed)  list_installed ;;
+        --current)    show_current ;;
+        --check)      fetch_kernelorg ;;
+        --install)    install_kernel "${2:?Usage: $0 --install VERSION}" ;;
+        --remove)     remove_kernel "${2:?Usage: $0 --remove VERSION}" ;;
+        --help|-h)
+            echo "GentooVM Kernel Manager"
+            echo ""
+            echo "Usage: sudo gentoovm-kernel-manager [OPTION]"
+            echo ""
+            echo "  (no args)     Interactive menu"
+            echo "  --check       Check kernel.org for latest versions"
+            echo "  --list        List available Gentoo binary kernels"
+            echo "  --installed   List installed kernels"
+            echo "  --current     Show running kernel"
+            echo "  --install VER Install kernel version VER"
+            echo "  --remove VER  Remove kernel version VER"
+            echo "  --help        Show this help"
+            echo ""
+            echo "Default: 7.0 (mainline)  |  Recommended: 6.19.x (latest stable)"
+            echo "Browse releases: https://www.kernel.org"
+            ;;
+        *) echo "Unknown option: $1. Use --help."; exit 1 ;;
+    esac
+fi

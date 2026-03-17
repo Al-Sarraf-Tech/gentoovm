@@ -1,0 +1,28 @@
+---
+componentName: gentoovm
+
+strings:
+    productName:         GentooVM
+    shortProductName:    GentooVM
+    version:             1.0
+    shortVersion:        1.0
+    versionedName:       GentooVM 1.0
+    shortVersionedName:  GentooVM 1.0
+    bootloaderEntryName: GentooVM
+    productUrl:          https://www.gentoo.org/
+    supportUrl:          https://www.gentoo.org/
+    knownIssuesUrl:      https://www.gentoo.org/
+    releaseNotesUrl:     https://www.gentoo.org/
+
+images:
+    productLogo:         "gentoo-logo.png"
+    productIcon:         "gentoo-logo.png"
+    productWelcome:      "gentoo-logo.png"
+
+slideshow:               "show.qml"
+
+style:
+   sidebarBackground:    "#2D2B55"
+   sidebarText:          "#FFFFFF"
+   sidebarTextSelect:    "#54487A"
+   sidebarTextHighlight: "#FFFFFF"
