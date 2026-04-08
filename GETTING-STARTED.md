@@ -19,7 +19,7 @@ Go to the [Releases page](../../releases/latest) and download **all** files:
 - `gentoovm.iso.part.01` — first half of the ISO
 - `gentoovm.iso.part.02` — second half of the ISO
 - `gentoovm.iso.sha256` — checksum for verification
-- `reassemble.sh` — reassembly script (Linux/macOS)
+- `reassemble.sh` — reassembly script (Linux)
 - `reassemble.ps1` — reassembly script (Windows)
 
 The ISO is split into two files because GitHub doesn't allow uploads larger than 2 GB.
@@ -28,7 +28,7 @@ The ISO is split into two files because GitHub doesn't allow uploads larger than
 
 Put all downloaded files in the same folder, then:
 
-**Linux / macOS:**
+**Linux:**
 ```bash
 chmod +x reassemble.sh
 ./reassemble.sh
@@ -65,11 +65,6 @@ sudo apt install qemu-system-x86 qemu-kvm
 **Arch:**
 ```bash
 sudo pacman -S qemu-desktop
-```
-
-**macOS (Homebrew):**
-```bash
-brew install qemu
 ```
 
 ---

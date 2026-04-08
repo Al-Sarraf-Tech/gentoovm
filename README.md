@@ -1,6 +1,6 @@
 # GentooVM
 
-[![CI](https://github.com/jalsarraf0/gentoovm/actions/workflows/ci.yml/badge.svg)](https://github.com/jalsarraf0/gentoovm/actions/workflows/ci.yml)
+[![CI](https://github.com/Al-Sarraf-Tech/gentoovm/actions/workflows/ci-shell.yml/badge.svg)](https://github.com/Al-Sarraf-Tech/gentoovm/actions/workflows/ci-shell.yml)
 
 > CI runs on self-hosted runners managed by the [Haskell Orchestrator](https://github.com/Al-Sarraf-Tech/Haskell-Orchestrator). Pipeline includes a governance `repo-guard` job that verifies repository ownership before all other jobs run.
 
@@ -21,7 +21,7 @@ A custom Gentoo Linux distribution built from scratch for QEMU/KVM virtual machi
 
 Download from the [Releases page](../../releases/latest). The ISO is split into two parts due to GitHub's file size limit.
 
-**Linux / macOS:**
+**Linux:**
 ```bash
 # Download all files from the release, then:
 chmod +x reassemble.sh
