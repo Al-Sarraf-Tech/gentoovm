@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/jalsarraf0/gentoovm/actions/workflows/ci.yml/badge.svg)](https://github.com/jalsarraf0/gentoovm/actions/workflows/ci.yml)
 
-> CI runs on self-hosted runners managed by [haskell-ci-orchestrator](https://github.com/jalsarraf0/haskell-ci-orchestrator).
+> CI runs on self-hosted runners managed by the [Haskell Orchestrator](https://github.com/Al-Sarraf-Tech/Haskell-Orchestrator). Pipeline includes a governance `repo-guard` job that verifies repository ownership before all other jobs run.
 
 A custom Gentoo Linux distribution built from scratch for QEMU/KVM virtual machines. Boots into a polished Cinnamon desktop with a one-click GUI installer.
 
@@ -371,6 +371,12 @@ gentoovm/
 **Package installation errors**
 - Run `sudo emerge --sync` to update the package database
 - Check USE flag conflicts: `emerge --pretend --verbose <package>`
+
+---
+
+## CI/CD & Orchestration
+
+This project is governed by the [Haskell Orchestrator](https://github.com/Al-Sarraf-Tech/Haskell-Orchestrator) — a Haskell-based multi-agent CI/CD governance framework for pre-push validation, code quality enforcement, and release management across the Al-Sarraf-Tech organization.
 
 ---
 
