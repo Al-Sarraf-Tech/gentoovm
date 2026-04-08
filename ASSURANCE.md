@@ -4,9 +4,9 @@ This document describes the CI/CD quality gates, security controls, and validati
 
 ---
 
-## CI Gates (ci.yml)
+## CI Gates (ci-shell.yml)
 
-GentooVM CI runs 8 jobs on every push to `main`, on `v*` tags, and on pull requests to `main`. All jobs run on `ubuntu-latest` with read-only permissions.
+GentooVM CI runs on every push to `main`, on `v*` tags, on pull requests, and on a weekly Monday schedule. All jobs run on self-hosted runners (`[self-hosted, unified-all]`) with explicit workflow-level permissions.
 
 ### 1. Static Validation
 
@@ -93,32 +93,30 @@ Why it matters: Guards against regressions that could slip through individual va
 
 ## Release Gating
 
-The release workflow (`release.yml`) is gated by a `ci-check` job that must pass before any release is created.
+The release job in `ci-shell.yml` is gated by `repo-guard`, `test`, and `security` jobs that must all pass before any release is created.
 
 ### Release Flow
 
-1. **`ci-check` job** -- Runs the key CI validations inline: YAML syntax, shell syntax, Python syntax, executable permissions, secret scanning, Calamares sequence integrity, security scan, checksum verification, and repo completeness.
-2. **`release` job** (needs: ci-check) -- Generates a CycloneDX SBOM and creates the GitHub Release with checksums, reassembly scripts, and SBOM attached.
-3. **`update-torrent-seed` job** (needs: release) -- Runs on the self-hosted runner to update the Transmission torrent seed with the new ISO.
+1. **`repo-guard` job** -- Verifies repository ownership (`Al-Sarraf-Tech/gentoovm`) before any other job runs.
+2. **`lint` and `security` jobs** (need: repo-guard) -- Shell syntax, ShellCheck, shfmt, and secrets scan must pass.
+3. **`test` job** (needs: repo-guard, lint) -- Script validation passes.
+4. **`sbom` job** (needs: repo-guard, test) -- Generates a hand-crafted CycloneDX SBOM on `main`.
+5. **`release` job** (needs: repo-guard, test, security) -- Generates checksums and creates the GitHub Release. Runs only on `v*` tags.
 
-A tag push (`v*`) will not produce a release if CI validation fails.
+A tag push (`v*`) will not produce a release if `test` or `security` jobs fail.
 
 ### Concurrency Controls
 
-- **ci.yml** -- Uses `ci-${{ github.ref }}` concurrency group with `cancel-in-progress: true`. Redundant CI runs on the same ref are cancelled.
-- **release.yml** -- Uses `release-${{ github.ref }}` concurrency group with `cancel-in-progress: false`. Releases are serialized, never cancelled mid-flight.
+- **ci-shell.yml** -- Uses `gentoovm-ci-${{ github.ref }}` concurrency group with `cancel-in-progress: true`. Redundant CI runs on the same ref are cancelled.
 
 ### Permissions
 
-All jobs use explicit `permissions` blocks following the principle of least privilege:
-- CI jobs and the ci-check gate: `contents: read`
-- Release job: `contents: write` (required to create GitHub Releases)
-- Torrent seed job: `contents: read`
+The workflow declares `permissions: contents: write, id-token: write, security-events: write` at the top level, which allows the release job to create GitHub Releases. All jobs run with the minimum access needed for their function.
 
 ### Secrets
 
 - `GITHUB_TOKEN` -- Used by the release job to create GitHub Releases (provided automatically by GitHub Actions).
-- `TRANSMISSION_CREDS` -- Transmission RPC credentials for the torrent seed update. Stored as a repository secret. Never hardcoded in workflow files.
+- `TRANSMISSION_CREDS` -- Transmission RPC credentials for the torrent seed update script. Must be configured as a repository secret. Never hardcoded in workflow or script files.
 
 ---
 

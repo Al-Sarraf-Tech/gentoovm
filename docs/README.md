@@ -6,7 +6,7 @@ This directory contains the complete build system for GentooVM, a custom Gentoo-
 
 ```bash
 # Full rebuild from scratch
-cd /home/jalsarraf/gentoo
+cd ~/git/gentoovm
 
 # 1. Extract fresh stage3 (if needed)
 sudo tar xpf cache/stage3-*.tar.xz -C build/ --xattrs-include='*.*' --numeric-owner

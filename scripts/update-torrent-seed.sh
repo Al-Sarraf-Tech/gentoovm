@@ -48,7 +48,7 @@ command -v transmission-create &>/dev/null || { echo "Error: transmission-create
 
 transmission-create \
     -o "$SEED_DIR/gentoovm-${VERSION}.torrent" \
-    -c "GentooVM ${VERSION} - Custom Gentoo Linux for QEMU/KVM. https://github.com/jalsarraf0/gentoovm" \
+    -c "GentooVM ${VERSION} - Custom Gentoo Linux for QEMU/KVM. https://github.com/Al-Sarraf-Tech/gentoovm" \
     -t udp://tracker.opentrackr.org:1337/announce \
     -t udp://tracker.openbittorrent.com:6969/announce \
     -t udp://open.stealth.si:80/announce \
