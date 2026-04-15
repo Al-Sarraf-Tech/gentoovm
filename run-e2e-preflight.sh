@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Stage 6: Pre-QEMU End-to-End Preflight
-BASE=/home/jalsarraf/gentoo
+BASE="${GENTOOVM_BUILD_ROOT:-/home/jalsarraf/gentoo}"
 BUILD_ROOT="$BASE/build"
 LOG="$BASE/logs/e2e-preflight.log"
 PASS=0

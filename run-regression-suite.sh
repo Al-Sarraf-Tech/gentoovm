@@ -3,7 +3,7 @@
 set -euo pipefail
 
 # Stage 7: Regression Suite
-BASE=/home/jalsarraf/gentoo
+BASE="${GENTOOVM_BUILD_ROOT:-/home/jalsarraf/gentoo}"
 BUILD_ROOT="$BASE/build"
 LOG="$BASE/logs/regression-suite.log"
 PASS=0

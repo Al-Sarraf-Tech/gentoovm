@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DISK="${1:-/home/jalsarraf/gentoo/qemu/test-disk.qcow2}"
+DISK="${1:-${GENTOOVM_BUILD_ROOT:-/home/jalsarraf/gentoo}/qemu/test-disk.qcow2}"
 
 if [ ! -f "$DISK" ]; then
     echo "ERROR: Disk image not found: $DISK"

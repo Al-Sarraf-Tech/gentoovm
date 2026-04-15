@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ISO=/home/jalsarraf/gentoo/gentoovm.iso
-DISK=/home/jalsarraf/gentoo/qemu/test-disk.qcow2
+ISO="${GENTOOVM_BUILD_ROOT:-/home/jalsarraf/gentoo}/gentoovm.iso"
+DISK="${GENTOOVM_BUILD_ROOT:-/home/jalsarraf/gentoo}/qemu/test-disk.qcow2"
 
 # Create test disk if it doesn't exist
 if [ ! -f "$DISK" ]; then

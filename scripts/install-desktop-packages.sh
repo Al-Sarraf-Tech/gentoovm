@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # Install all desktop packages into the chroot
-BUILD_ROOT=/home/jalsarraf/gentoo/build
-LOG=/home/jalsarraf/gentoo/logs/install-desktop.log
+BUILD_ROOT="${GENTOOVM_BUILD_ROOT:-/home/jalsarraf/gentoo}/build"
+LOG="${GENTOOVM_BUILD_ROOT:-/home/jalsarraf/gentoo}/logs/install-desktop.log"
 
 echo "=== Installing desktop packages ==="
 echo "Log: $LOG"

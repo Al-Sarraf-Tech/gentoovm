@@ -1,10 +1,28 @@
 #!/usr/bin/env bash
+# Build Requirements:
+#   xorriso >= 1.5.4
+#   mksquashfs >= 4.6 (squashfs-tools)
+#   grub-mkstandalone (grub2-mkstandalone on some distros)
+#   dracut (for initramfs generation)
+#   mkfs.vfat (dosfstools)
 set -euo pipefail
 
-BUILD_ROOT=/home/jalsarraf/gentoo/build
-STAGING=/home/jalsarraf/gentoo/staging
-ISO_OUT=/home/jalsarraf/gentoo/gentoovm.iso
-LOG=/home/jalsarraf/gentoo/logs/build-iso.log
+BUILD_ROOT="${GENTOOVM_BUILD_ROOT:-/home/jalsarraf/gentoo}/build"
+STAGING="${GENTOOVM_BUILD_ROOT:-/home/jalsarraf/gentoo}/staging"
+ISO_OUT="${GENTOOVM_BUILD_ROOT:-/home/jalsarraf/gentoo}/gentoovm.iso"
+LOG="${GENTOOVM_BUILD_ROOT:-/home/jalsarraf/gentoo}/logs/build-iso.log"
+
+# Reproducibility: fix timestamps for deterministic output
+export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(date +%s)}"
+
+cleanup() {
+    rm -f /tmp/grub-live.cfg /tmp/bios-combined.img
+    if mountpoint -q "${MNTDIR:-/nonexistent}" 2>/dev/null; then
+        sudo umount "$MNTDIR"
+        rmdir "$MNTDIR"
+    fi
+}
+trap cleanup EXIT
 
 echo "=== Building ISO ===" | tee "$LOG"
 
@@ -19,13 +37,13 @@ sudo mksquashfs "$BUILD_ROOT" "$STAGING/LiveOS/rootfs.squashfs" \
     -e proc -e sys -e dev -e run -e tmp \
     -e var/cache/distfiles -e var/cache/binpkgs \
     -e var/tmp/portage \
-    -noappend 2>&1 | tail -5 | tee -a "$LOG"
+    -noappend -reproducible 2>&1 | tail -5 | tee -a "$LOG"
 
 echo "Squashfs size: $(du -sh "$STAGING/LiveOS/rootfs.squashfs" | cut -f1)" | tee -a "$LOG"
 
 # ---- Copy kernel and initramfs ----
 echo "Copying boot files..." | tee -a "$LOG"
-KVER=$(ls "$BUILD_ROOT/lib/modules/" 2>/dev/null | sort -V | tail -1)
+KVER="${GENTOOVM_KERNEL_VERSION:-$(ls "$BUILD_ROOT/lib/modules/" 2>/dev/null | sort -V | tail -1)}"
 if [ -z "$KVER" ]; then
     echo "ERROR: No kernel modules found in $BUILD_ROOT/lib/modules/" | tee -a "$LOG"
     exit 1
@@ -145,6 +163,8 @@ fi
 # ---- Build ISO ----
 echo "Building ISO image..." | tee -a "$LOG"
 
+# Reproducibility: xorriso uses SOURCE_DATE_EPOCH (set above) for all
+# embedded timestamps when called with -as mkisofs; no extra flag needed.
 # Determine xorriso arguments
 XORRISO_ARGS=(
     -as mkisofs
@@ -182,6 +202,7 @@ if [ -f "$STAGING/EFI/BOOT/BOOTX64.EFI" ]; then
     sudo cp "$STAGING/EFI/BOOT/BOOTX64.EFI" "$MNTDIR/EFI/BOOT/BOOTX64.EFI"
     sudo umount "$MNTDIR"
     rmdir "$MNTDIR"
+    unset MNTDIR
 
     XORRISO_ARGS+=(
         -eltorito-alt-boot
@@ -197,7 +218,7 @@ xorriso "${XORRISO_ARGS[@]}" 2>&1 | tee -a "$LOG"
 
 # ---- Checksums ----
 echo "Generating checksums..." | tee -a "$LOG"
-cd /home/jalsarraf/gentoo
+cd "${GENTOOVM_BUILD_ROOT:-/home/jalsarraf/gentoo}"
 sha256sum gentoovm.iso > gentoovm.iso.sha256
 md5sum gentoovm.iso > gentoovm.iso.md5
 

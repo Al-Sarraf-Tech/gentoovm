@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BUILD_ROOT=/home/jalsarraf/gentoo/build
-LOG=/home/jalsarraf/gentoo/logs/configure-system.log
+BUILD_ROOT="${GENTOOVM_BUILD_ROOT:-/home/jalsarraf/gentoo}/build"
+LOG="${GENTOOVM_BUILD_ROOT:-/home/jalsarraf/gentoo}/logs/configure-system.log"
 
 echo "=== Configuring system ===" | tee "$LOG"
 

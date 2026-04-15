@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Stage 1: Static Validation
-BASE=/home/jalsarraf/gentoo
+BASE="${GENTOOVM_BUILD_ROOT:-/home/jalsarraf/gentoo}"
 LOG="$BASE/logs/static-validation.log"
 PASS=0
 FAIL=0
@@ -49,6 +49,16 @@ for f in "$BASE/scripts/"*.sh "$BASE/qemu/"*.sh "$BASE"/run-*.sh; do
         fi
     fi
 done
+
+# Python syntax
+log "--- Python syntax ---"
+if [ -f "$BASE/config/gentoovm-kernel-manager-gui" ]; then
+    if python3 -m py_compile "$BASE/config/gentoovm-kernel-manager-gui" 2>/dev/null; then
+        pass "Python syntax: gentoovm-kernel-manager-gui"
+    else
+        fail "Python syntax: gentoovm-kernel-manager-gui"
+    fi
+fi
 
 # Executable permissions
 log "--- Executable permissions ---"

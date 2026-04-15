@@ -36,6 +36,10 @@ token
 token.*
 *.token
 
+# CI artifacts
+sbom.cdx.json
+release-assets/
+
 # Temporary
 *.tmp
 *.swp

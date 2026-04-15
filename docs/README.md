@@ -65,7 +65,11 @@ bash run-qemu-final-user-verify.sh
 
 ## Validation Pipeline
 
-Stages 1-7 must pass before QEMU testing:
+Stage 0 runs unit tests against the repo itself (no build environment needed):
+
+0. **Unit Tests** — 13 suites, 580+ assertions across configs, security, docs, build reproducibility, version consistency, ISO distribution, and script quality
+
+Stages 1-7 validate the build workspace (`~/gentoo/build/`):
 
 1. **Static Validation** — config syntax, YAML, shell, permissions
 2. **Smoke Tests** — directories, files, artifacts exist
@@ -77,8 +81,8 @@ Stages 1-7 must pass before QEMU testing:
 
 Stages 8-9 are automated QEMU tests:
 
-8. **Live Boot Test** — ISO boots in QEMU
-9. **Post-Install Test** — installed system boots
+8. **Live Boot Test** — ISO boots in QEMU, validates kernel → systemd → login sequence
+9. **Post-Install Test** — installed system boots from disk
 
 Stage 10 is manual:
 
@@ -86,7 +90,9 @@ Stage 10 is manual:
 
 ## Key Files
 
+- `VERSION` — Single source of truth for release version
 - `gentoovm.iso` — Final ISO image
-- `run-all-preqemu-validation.sh` — Run all pre-QEMU validation
+- `run-unit-tests.sh` — Run all unit tests (repo-level validation)
+- `run-all-preqemu-validation.sh` — Run all validation (stages 0-7)
 - `run-qemu-final-user-verify.sh` — Launch VM for manual inspection
 - `qemu/launch-installed.sh` — Launch installed system anytime

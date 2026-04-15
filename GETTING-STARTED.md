@@ -224,6 +224,7 @@ The VM includes spice-vdagent for clipboard sharing, but it requires a SPICE dis
 - The "Erase disk" option in the installer only erases the **virtual disk**, not your real hard drive.
 - Your files, programs, and operating system are completely safe.
 - **Do not** attempt to install GentooVM on real hardware (bare metal). It is designed and tested only for virtual machines.
+- For security concerns, see [SECURITY.md](SECURITY.md) for our vulnerability reporting policy.
 
 ---
 

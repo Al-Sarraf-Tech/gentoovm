@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Configure the live session environment
-BUILD_ROOT=/home/jalsarraf/gentoo/build
+BUILD_ROOT="${GENTOOVM_BUILD_ROOT:-/home/jalsarraf/gentoo}/build"
 
 echo "=== Setting up live session ==="
 
@@ -57,7 +57,7 @@ echo "Live session setup complete"
 CHROOT
 
 # Copy Calamares config files
-CALAM_SRC=/home/jalsarraf/gentoo/calamares
+CALAM_SRC="${GENTOOVM_BUILD_ROOT:-/home/jalsarraf/gentoo}/calamares"
 sudo cp "$CALAM_SRC/settings.conf" "$BUILD_ROOT/etc/calamares/settings.conf"
 sudo cp -r "$CALAM_SRC/branding/gentoovm/"* "$BUILD_ROOT/etc/calamares/branding/gentoovm/"
 for f in "$CALAM_SRC/modules/"*.conf; do
@@ -66,10 +66,10 @@ done
 
 # Copy README for deployment
 sudo mkdir -p "$BUILD_ROOT/usr/share/gentoovm"
-sudo cp /home/jalsarraf/gentoo/config/README-desktop.md "$BUILD_ROOT/usr/share/gentoovm/README.md"
+sudo cp "${GENTOOVM_BUILD_ROOT:-/home/jalsarraf/gentoo}/config/README-desktop.md" "$BUILD_ROOT/usr/share/gentoovm/README.md"
 
 # Also put in skel
 sudo mkdir -p "$BUILD_ROOT/etc/skel/Desktop"
-sudo cp /home/jalsarraf/gentoo/config/README-desktop.md "$BUILD_ROOT/etc/skel/Desktop/README.md"
+sudo cp "${GENTOOVM_BUILD_ROOT:-/home/jalsarraf/gentoo}/config/README-desktop.md" "$BUILD_ROOT/etc/skel/Desktop/README.md"
 
 echo "=== Live session setup complete ==="

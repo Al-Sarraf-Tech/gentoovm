@@ -6,7 +6,7 @@ This document describes the CI/CD quality gates, security controls, and validati
 
 ## CI Gates (ci-shell.yml)
 
-GentooVM CI runs on every push to `main`, on `v*` tags, on pull requests, and on a weekly Monday schedule. All jobs run on self-hosted runners (`[self-hosted, unified-all]`) with explicit workflow-level permissions.
+GentooVM CI runs on every push to `main`, on `v*` tags, on pull requests, and on a weekly Monday schedule. All jobs run on self-hosted runners (`[self-hosted, shell-slim]`) with explicit workflow-level permissions.
 
 ### 1. Static Validation
 
@@ -24,7 +24,7 @@ Why it matters: Catches the cheapest-to-fix errors first and prevents credential
 
 Validates the Calamares installer configuration for correctness.
 
-- **Sequence integrity** -- Verifies that all required show modules (welcome, locale, keyboard, partition, users, summary, finished) and exec modules (partition, mount, unpackfs, users, shellprocess, umount) are present in `settings.conf`.
+- **Sequence integrity** -- Verifies that all required show modules (welcome, locale, keyboard, partition, users, summary, finished) and exec modules (partition, mount, unpackfs, machineid, fstab, locale, keyboard, localecfg, users, displaymanager, networkcfg, hwclock, services-systemd, shellprocess, umount) are present in `settings.conf`.
 - **Installer defaults** -- Checks that timezone, admin group, geoip, partitioning scheme, filesystem, and GRUB timeout are set correctly.
 - **No remote dependencies** -- Ensures Calamares modules do not fetch remote resources during installation (offline install requirement).
 
@@ -53,22 +53,23 @@ Why it matters: Users need accurate, complete documentation. Missing sections le
 
 ### 5. Security Scan
 
-Dedicated security-focused validation.
+Dedicated security-focused validation. Runs in parallel with lint (needs: repo-guard only).
 
-- **Credential scan** -- Searches for private keys and hardcoded passwords in scripts and config files.
-- **File permissions** -- Detects world-writable files that could be a security risk.
-- **Shellcheck** -- Runs shellcheck with warning-level severity on critical scripts to catch common shell scripting vulnerabilities and bugs.
+- **Gitleaks** -- Runs `gitleaks detect` across the full repository history to catch secrets committed at any point.
+- **Credential pattern scan** -- Searches for `BEGIN.*PRIVATE KEY` patterns in `.sh`, `.conf`, `.py`, and `.yml` files outside `.git/`. Fails immediately on any match.
 
-Why it matters: Prevents credential leakage and catches shell scripting security anti-patterns.
+ShellCheck and shfmt are handled by the lint job; the security job does not duplicate them.
+
+Why it matters: Prevents credential leakage. Gitleaks covers history, not just the current tree.
 
 ### 6. SBOM Generation
 
-Generates a CycloneDX Software Bill of Materials from `manifests/installed-packages.txt`.
+Generates a CycloneDX Software Bill of Materials from `manifests/installed-packages.txt`. Runs after `test` passes (`needs: [repo-guard, test]`), on `main` branch only.
 
-- Parses all 889+ Gentoo packages into structured SBOM format with category, name, and version.
-- Uploads the SBOM as a build artifact for supply chain auditing.
+- Parses all Gentoo packages into structured CycloneDX 1.4 JSON using an inline Python script — each line becomes a component with `name`, `version`, and `purl` (`pkg:gentoo/...`).
+- Uploads `sbom.cdx.json` as a CI artifact (`sbom-cyclonedx`) via `actions/upload-artifact@v4` with 90-day retention.
 
-Why it matters: Enables vulnerability scanning against the full package manifest and provides supply chain transparency.
+Why it matters: Enables vulnerability scanning against the full package manifest and provides supply chain transparency. Artifact is downloadable from any CI run.
 
 ### 7. Checksum Verification
 
@@ -79,15 +80,25 @@ Validates that ISO integrity files are present.
 
 Why it matters: Users depend on checksums to verify download integrity. Missing checksum files mean users cannot validate their ISO.
 
-### 8. Regression Suite
+### 8. Unit Tests
 
-Runs after static-validation, config-validation, and postinstall-validation pass.
+Runs after lint passes (`needs: [repo-guard, lint]`). Executes `bash run-unit-tests.sh`, which drives 13 test suites in `tests/unit/`:
 
-- **Config regression** -- Re-validates critical Calamares settings (timezone, users, partition, admin group, display manager).
-- **Post-install regression** -- Re-validates critical post-install features (sudo, README, zram, bootloader, cleanup).
-- **Repo completeness** -- Verifies all required files exist in the repository (18 files checked).
+1. Calamares configuration
+2. Post-install safety
+3. Script quality
+4. `make.conf` correctness
+5. Repository structure
+6. ISO distribution
+7. Security
+8. Documentation
+9. Assertion library
+10. Build reproducibility
+11. Package manifest
+12. Version consistency
+13. Config management
 
-Why it matters: Guards against regressions that could slip through individual validation jobs. Acts as a final integration check.
+Why it matters: Real unit tests covering all major subsystems. Lint must pass before tests run, ensuring tests are not executed against files with syntax errors.
 
 ---
 
@@ -98,12 +109,12 @@ The release job in `ci-shell.yml` is gated by `repo-guard`, `test`, and `securit
 ### Release Flow
 
 1. **`repo-guard` job** -- Verifies repository ownership (`Al-Sarraf-Tech/gentoovm`) before any other job runs.
-2. **`lint` and `security` jobs** (need: repo-guard) -- Shell syntax, ShellCheck, shfmt, and secrets scan must pass.
-3. **`test` job** (needs: repo-guard, lint) -- Script validation passes.
-4. **`sbom` job** (needs: repo-guard, test) -- Generates a hand-crafted CycloneDX SBOM on `main`.
-5. **`release` job** (needs: repo-guard, test, security) -- Generates checksums and creates the GitHub Release. Runs only on `v*` tags.
+2. **`lint` job** (needs: repo-guard) -- Bash syntax, ShellCheck, shfmt must pass. **`security` job** (needs: repo-guard) runs in parallel -- gitleaks + credential pattern scan must pass.
+3. **`test` job** (needs: repo-guard, lint) -- Runs `bash run-unit-tests.sh` across all 13 unit test suites.
+4. **`sbom` job** (needs: repo-guard, test) -- Generates CycloneDX SBOM on `main`; uploads as CI artifact.
+5. **`release` job** (needs: repo-guard, test, security) -- Builds `release-assets/` at job time (copies checksums, reassembly scripts, torrent, split ISO parts; generates SBOM inline; produces `SHA256SUMS`), then creates the GitHub Release with all assets. Runs only on `v*` tags.
 
-A tag push (`v*`) will not produce a release if `test` or `security` jobs fail.
+The `release-assets/` directory does not pre-exist in the repository; it is constructed entirely during the release job. A tag push (`v*`) will not produce a release if `test` or `security` jobs fail.
 
 ### Concurrency Controls
 
@@ -150,13 +161,12 @@ The reassembly scripts (`reassemble.sh`, `reassemble.ps1`) automatically verify 
 
 ## Security Scan
 
-The security scan job runs on every CI invocation and checks for:
+The security job runs on every CI invocation in parallel with lint and checks for:
 
-1. **Private keys** -- PEM-encoded key block patterns in scripts, configs, and Python files
-2. **Hardcoded passwords** -- `password\s*=\s*['"]` patterns (excluding documentation)
-3. **API keys/tokens** -- `api_key`, `api_token`, `secret_key` patterns
-4. **File permissions** -- World-writable files outside `.git/`
-5. **Shell scripting issues** -- Shellcheck at warning level on critical scripts
+1. **Gitleaks** -- Full repository history scan via `gitleaks detect --source=. --no-banner --exit-code=1`
+2. **Private key patterns** -- `BEGIN.*PRIVATE KEY` in `.sh`, `.conf`, `.py`, `.yml` files (excluding `.git/`)
+
+Shell scripting quality (ShellCheck, shfmt) is handled exclusively by the lint job.
 
 ---
 
@@ -167,6 +177,7 @@ The repository includes shell scripts that mirror the CI validation pipeline:
 | Script | Purpose |
 |---|---|
 | `run-static-validation.sh` | Static analysis (YAML, shell, Python syntax, permissions) |
+| `run-unit-tests.sh` | Unit tests — all 13 suites in `tests/unit/` |
 | `run-smoke-tests.sh` | Quick smoke tests |
 | `run-e2e-preflight.sh` | End-to-end preflight checks |
 | `run-regression-suite.sh` | Full regression suite |

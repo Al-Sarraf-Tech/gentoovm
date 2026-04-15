@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE=/home/jalsarraf/gentoo
+BASE="${GENTOOVM_BUILD_ROOT:-/home/jalsarraf/gentoo}"
 echo "=========================================="
 echo "  Running Pre-QEMU Validation Pipeline"
 echo "=========================================="
@@ -20,6 +20,7 @@ run_stage() {
     fi
 }
 
+run_stage 0 "Unit Tests"             "run-unit-tests.sh"
 run_stage 1 "Static Validation"     "run-static-validation.sh"
 run_stage 2 "Smoke Tests"           "run-smoke-tests.sh"
 # Stages 3-5 are covered by smoke + e2e preflight for this build

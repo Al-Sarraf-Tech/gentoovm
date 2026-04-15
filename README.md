@@ -54,7 +54,7 @@ The torrent downloads the full ISO in a single file — no reassembly needed. Us
 
 ## What You Get
 
-- **Gentoo Linux** base with 889 prebuilt packages
+- **Gentoo Linux** base with 887 prebuilt packages
 - **Cinnamon 6.4.13** desktop environment
 - **Kernel 6.19.7** with virtio and virgl GPU acceleration
 - **Calamares** graphical installer — no Gentoo knowledge required to install
@@ -275,11 +275,11 @@ GentooVM is built from a Gentoo stage3 tarball using the following process:
 
 1. **Base system**: Gentoo stage3-amd64-systemd extracted and updated
 2. **Profile**: `default/linux/amd64/23.0/desktop/systemd`
-3. **Package installation**: Cinnamon, LightDM, Calamares, kernel, firmware, apps — 889 packages total
+3. **Package installation**: Cinnamon, LightDM, Calamares, kernel, firmware, apps — 887 packages total
 4. **Configuration**: LightDM, sudo, zram, sysctl, NetworkManager, earlyoom, GRUB
 5. **Live session**: Auto-login user, Calamares desktop shortcut, polkit rules
 6. **ISO assembly**: squashfs (zstd compressed) + dracut initramfs (dmsquash-live) + GRUB (grub2-mkrescue)
-7. **Validation**: 234 automated checks across static analysis, smoke tests, E2E preflight, regression suite, QEMU boot tests, and installed system deep scans
+7. **Validation**: 580+ automated assertions across 13 unit test suites, static analysis, smoke tests, E2E preflight, regression suite, QEMU boot tests, and installed system deep scans
 
 ### Rebuilding from Source
 
@@ -321,6 +321,7 @@ See `docs/README.md` for detailed rebuild instructions.
 Run the full test suite:
 
 ```bash
+bash run-unit-tests.sh                # 13 unit test suites (580+ assertions)
 bash run-all-preqemu-validation.sh    # Stages 1-7 (static, smoke, E2E, regression)
 bash run-qemu-live-test.sh            # Stage 8 (QEMU ISO boot)
 bash run-qemu-installed-test.sh       # Stage 9 (installed system boot)
@@ -342,10 +343,17 @@ gentoovm/
     gentoovm-kernel-manager-gui  GUI kernel manager (Python/GTK3)
   scripts/             Build scripts
   qemu/                QEMU launch scripts
+  tests/               Test suite
+    lib/               Shared test assertion library
+    unit/              13 unit test suites (config, security, docs, build, etc.)
   docs/                Detailed rebuild documentation
   manifests/           Package manifests
   iso/                 Golden ISO output (checksums tracked, ISO gitignored)
   run-*.sh             Validation pipeline scripts
+  Makefile             Build/test/lint targets (make help)
+  VERSION              Release version (single source of truth)
+  SECURITY.md          Security policy and vulnerability reporting
+  .editorconfig        Editor formatting rules
 ```
 
 ---

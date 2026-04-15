@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Stage 2: Smoke Tests
-BASE=/home/jalsarraf/gentoo
+BASE="${GENTOOVM_BUILD_ROOT:-/home/jalsarraf/gentoo}"
 LOG="$BASE/logs/smoke-tests.log"
 PASS=0
 FAIL=0

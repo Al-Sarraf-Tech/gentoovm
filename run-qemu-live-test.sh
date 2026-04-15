@@ -4,7 +4,7 @@ set -euo pipefail
 
 # Stage 8: Automated QEMU Live Boot Test
 # Tests that the ISO boots to a live graphical environment
-BASE=/home/jalsarraf/gentoo
+BASE="${GENTOOVM_BUILD_ROOT:-/home/jalsarraf/gentoo}"
 ISO="$BASE/gentoovm.iso"
 DISK="$BASE/qemu/test-disk.qcow2"
 LOG="$BASE/logs/qemu-live-test.log"
@@ -41,15 +41,29 @@ timeout 180 qemu-system-x86_64 \
 
 QEMU_PID=$!
 
-# Wait for boot indicators in serial log
-BOOTED=false
+# Wait for boot sequence in serial log — validate stages, not just any keyword
+BOOT_STAGE=0
 for i in $(seq 1 60); do
     sleep 3
-    if [ -f "$SERIAL_LOG" ]; then
-        if grep -qiE "login:|Welcome|systemd.*reached target|graphical.target" "$SERIAL_LOG" 2>/dev/null; then
-            BOOTED=true
-            break
-        fi
+    [ -f "$SERIAL_LOG" ] || continue
+
+    # Stage 1: Kernel started (any kernel message)
+    if [ "$BOOT_STAGE" -lt 1 ] && grep -qi "Linux version\|Booting Linux" "$SERIAL_LOG" 2>/dev/null; then
+        BOOT_STAGE=1
+        echo "  Boot stage 1: kernel started" | tee -a "$LOG"
+    fi
+
+    # Stage 2: systemd reached a target
+    if [ "$BOOT_STAGE" -lt 2 ] && grep -qi "systemd.*reached target\|Started.*target" "$SERIAL_LOG" 2>/dev/null; then
+        BOOT_STAGE=2
+        echo "  Boot stage 2: systemd targets reached" | tee -a "$LOG"
+    fi
+
+    # Stage 3: Login prompt or display manager
+    if [ "$BOOT_STAGE" -lt 3 ] && grep -qiE "login:|graphical.target|lightdm" "$SERIAL_LOG" 2>/dev/null; then
+        BOOT_STAGE=3
+        echo "  Boot stage 3: login/display manager ready" | tee -a "$LOG"
+        break
     fi
 done
 
@@ -57,12 +71,17 @@ done
 kill "$QEMU_PID" 2>/dev/null || true
 wait "$QEMU_PID" 2>/dev/null || true
 
-if $BOOTED; then
-    echo "PASS: ISO booted successfully" | tee -a "$LOG"
+if [ "$BOOT_STAGE" -ge 3 ]; then
+    echo "PASS: ISO booted successfully (all 3 stages)" | tee -a "$LOG"
     exit 0
+elif [ "$BOOT_STAGE" -ge 1 ]; then
+    echo "FAIL: ISO partially booted (reached stage $BOOT_STAGE/3)" | tee -a "$LOG"
+    echo "Serial log tail:" | tee -a "$LOG"
+    tail -50 "$SERIAL_LOG" 2>/dev/null | tee -a "$LOG"
+    exit 1
 else
-    echo "FAIL: ISO did not reach expected boot state within timeout" | tee -a "$LOG"
+    echo "FAIL: ISO did not boot (no kernel messages in serial)" | tee -a "$LOG"
     echo "Serial log contents:" | tee -a "$LOG"
-    cat "$SERIAL_LOG" 2>/dev/null | tail -50 | tee -a "$LOG"
+    cat "$SERIAL_LOG" 2>/dev/null | tee -a "$LOG"
     exit 1
 fi

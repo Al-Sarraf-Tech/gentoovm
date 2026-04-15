@@ -4,7 +4,7 @@ set -euo pipefail
 
 # Stage 9: Post-Install QEMU Regression
 # Tests the installed system disk image
-BASE=/home/jalsarraf/gentoo
+BASE="${GENTOOVM_BUILD_ROOT:-/home/jalsarraf/gentoo}"
 DISK="$BASE/qemu/test-disk.qcow2"
 LOG="$BASE/logs/qemu-installed-test.log"
 
@@ -43,22 +43,33 @@ timeout 120 qemu-system-x86_64 \
 
 QEMU_PID=$!
 
-BOOTED=false
+BOOT_STAGE=0
 for i in $(seq 1 40); do
     sleep 3
-    if [ -f "$SERIAL_LOG" ]; then
-        if grep -qiE "login:|Welcome|systemd.*reached target|graphical.target" "$SERIAL_LOG" 2>/dev/null; then
-            BOOTED=true
-            break
-        fi
+    [ -f "$SERIAL_LOG" ] || continue
+
+    if [ "$BOOT_STAGE" -lt 1 ] && grep -qi "Linux version\|Booting Linux" "$SERIAL_LOG" 2>/dev/null; then
+        BOOT_STAGE=1
+        echo "  Boot stage 1: kernel started" | tee -a "$LOG"
+    fi
+    if [ "$BOOT_STAGE" -lt 2 ] && grep -qi "systemd.*reached target\|Started.*target" "$SERIAL_LOG" 2>/dev/null; then
+        BOOT_STAGE=2
+        echo "  Boot stage 2: systemd targets reached" | tee -a "$LOG"
+    fi
+    if [ "$BOOT_STAGE" -lt 3 ] && grep -qiE "login:|graphical.target|lightdm" "$SERIAL_LOG" 2>/dev/null; then
+        BOOT_STAGE=3
+        echo "  Boot stage 3: login/display manager ready" | tee -a "$LOG"
+        break
     fi
 done
 
 kill "$QEMU_PID" 2>/dev/null || true
 wait "$QEMU_PID" 2>/dev/null || true
 
-if $BOOTED; then
-    echo "PASS: Installed system boots successfully" | tee -a "$LOG"
+if [ "$BOOT_STAGE" -ge 3 ]; then
+    echo "PASS: Installed system boots successfully (all 3 stages)" | tee -a "$LOG"
+elif [ "$BOOT_STAGE" -ge 1 ]; then
+    echo "WARN: Installed system partially booted (stage $BOOT_STAGE/3 — serial may be limited)" | tee -a "$LOG"
 else
     echo "INFO: Could not verify boot via serial (may need VGA)" | tee -a "$LOG"
 fi

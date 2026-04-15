@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # Stage 10: Final user-facing QEMU launch for manual verification
-DISK="${1:-/home/jalsarraf/gentoo/qemu/test-disk.qcow2}"
-ISO="/home/jalsarraf/gentoo/gentoovm.iso"
+DISK="${1:-${GENTOOVM_BUILD_ROOT:-/home/jalsarraf/gentoo}/qemu/test-disk.qcow2}"
+ISO="${GENTOOVM_BUILD_ROOT:-/home/jalsarraf/gentoo}/gentoovm.iso"
 
 # Determine display mode
 DISPLAY_MODE="${DISPLAY_MODE:-auto}"
@@ -15,11 +15,12 @@ if [ "$DISPLAY_MODE" = "auto" ]; then
     fi
 fi
 
+DISPLAY_ARGS=()
 case "$DISPLAY_MODE" in
-    gtk)  DISPLAY_ARGS="-display gtk" ;;
-    vnc)  DISPLAY_ARGS="-display vnc=:0" ;;
-    spice) DISPLAY_ARGS="-display spice-app" ;;
-    *)    DISPLAY_ARGS="-display vnc=:0" ;;
+    gtk)   DISPLAY_ARGS=(-display gtk) ;;
+    vnc)   DISPLAY_ARGS=(-display vnc=:0) ;;
+    spice) DISPLAY_ARGS=(-display spice-app) ;;
+    *)     DISPLAY_ARGS=(-display vnc=:0) ;;
 esac
 
 echo "=========================================="
@@ -29,18 +30,17 @@ echo ""
 echo "Display: $DISPLAY_MODE"
 
 # Decide boot mode
+BOOT_ARGS=()
 if [ -f "$ISO" ] && [ -f "$DISK" ]; then
     DISK_SIZE=$(stat -c%s "$DISK" 2>/dev/null || echo 0)
     if [ "$DISK_SIZE" -lt 1073741824 ]; then
         echo "Boot mode: Live ISO (fresh disk for installation)"
-        BOOT_ARGS="-cdrom $ISO -boot d"
+        BOOT_ARGS=(-cdrom "$ISO" -boot d)
     else
         echo "Boot mode: Installed system"
-        BOOT_ARGS=""
     fi
 elif [ -f "$DISK" ]; then
     echo "Boot mode: Installed system"
-    BOOT_ARGS=""
 else
     echo "ERROR: No disk image found"
     exit 1
@@ -59,12 +59,12 @@ exec qemu-system-x86_64 \
     -smp 4 \
     -m 16384 \
     -drive file="$DISK",format=qcow2,if=virtio \
-    $BOOT_ARGS \
+    "${BOOT_ARGS[@]}" \
     -device virtio-net-pci,netdev=net0 \
     -netdev user,id=net0 \
     -device virtio-vga-gl \
     -device virtio-balloon \
     -device qemu-xhci \
     -device usb-tablet \
-    $DISPLAY_ARGS \
+    "${DISPLAY_ARGS[@]}" \
     -name "GentooVM - Manual Verification"

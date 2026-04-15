@@ -5,20 +5,18 @@ Custom Gentoo Linux distribution built from scratch for QEMU/KVM virtual machine
 ## Build
 
 ```bash
-bash run-all-preqemu-validation.sh    # pre-QEMU validation
+bash run-all-preqemu-validation.sh    # pre-QEMU validation (stages 1-7)
 bash run-e2e-preflight.sh             # end-to-end preflight checks
 ```
 
 ## Test
 
 ```bash
-bash run-e2e-preflight.sh
-bash run-qemu-installed-test.sh       # test installed system in QEMU
-bash run-qemu-final-user-verify.sh    # final user verification in QEMU
+make test                             # or: bash run-unit-tests.sh
 ```
 
 ## Lint
 
 ```bash
-shellcheck run-all-preqemu-validation.sh run-e2e-preflight.sh run-qemu-installed-test.sh run-qemu-final-user-verify.sh
+make lint                             # or: shellcheck --severity=warning $(find . -name '*.sh' -not -path './.git/*')
 ```
